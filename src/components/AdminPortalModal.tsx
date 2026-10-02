@@ -70,7 +70,88 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
   // Dusun Filter
   const [dusunFilter, setDusunFilter] = useState('all');
 
+  // Export CSV State
+  const [exportNotification, setExportNotification] = useState<string | null>(null);
+
   if (!isOpen) return null;
+
+  const handleExportCSV = () => {
+    const headers = [
+      'No',
+      'ID Warga',
+      'Nama Lengkap',
+      'NIK (KTP)',
+      'Nomor Kartu Keluarga (KK)',
+      'Jenis Kelamin',
+      'Tempat Lahir',
+      'Tanggal Lahir',
+      'Agama',
+      'Pendidikan',
+      'Pekerjaan',
+      'Status Perkawinan',
+      'Wilayah Dusun',
+      'Alamat Lengkap',
+      'Nomor Handphone / WhatsApp',
+      'Penerima Bantuan Sosial (BLT)',
+      'Status Kependudukan',
+      'Hash Kriptografi SHA-256',
+      'Tanggal Pembaruan'
+    ];
+
+    const rows = filteredCitizens.map((c, index) => [
+      (index + 1).toString(),
+      c.id,
+      c.nama,
+      isDecrypted ? c.nik : maskNIK(c.nik),
+      isDecrypted ? c.noKK : maskKK(c.noKK),
+      c.jenisKelamin,
+      c.tempatLahir,
+      c.tanggalLahir,
+      c.agama,
+      c.pendidikan,
+      c.pekerjaan,
+      c.statusKawin,
+      c.alamatDusun,
+      'Desa Fadoro, Kec. Sirombu, Kab. Nias Barat, Sumatera Utara',
+      c.noHp,
+      c.isBansosRecipient ? 'Ya (KPM BLT)' : 'Bukan Penerima',
+      c.statusKependudukan,
+      c.hashVerification,
+      c.updatedAt
+    ]);
+
+    // Format CSV with proper quoting and UTF-8 BOM (\uFEFF) for Excel
+    const csvContent = [
+      headers.map(h => `"${h.replace(/"/g, '""')}"`).join(','),
+      ...rows.map(row => row.map(cell => `"${(cell ?? '').toString().replace(/"/g, '""')}"`).join(','))
+    ].join('\r\n');
+
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const dateStr = new Date().toISOString().split('T')[0];
+    const modeStr = isDecrypted ? 'LENGKAP_UNLOCKED' : 'TERENKRIPSI_MASKED';
+    const fileName = `Data_Kependudukan_Desa_Fadoro_${modeStr}_${dateStr}.csv`;
+
+    link.setAttribute('href', url);
+    link.setAttribute('download', fileName);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    setExportNotification(`Berhasil mengekspor ${filteredCitizens.length} data warga ke file "${fileName}".`);
+    setTimeout(() => setExportNotification(null), 6000);
+
+    onAddAuditLog({
+      user: 'Kepala Desa (TAROMALIMO ZIDUHU MARUNDURI)',
+      role: 'Kepala Desa',
+      action: 'EXPORT_DATA_WARGA',
+      target: `Ekspor CSV Data Warga (${filteredCitizens.length} baris - ${isDecrypted ? 'Plaintext NIK Terbuka' : 'Sensor Masking NIK'})`,
+      ipAddress: '180.252.14.88 (Kantor Desa)',
+      status: 'SUCCESS'
+    });
+  };
 
   const handleUnlockPin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -482,7 +563,7 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
                   </p>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <select
                     value={dusunFilter}
                     onChange={(e) => setDusunFilter(e.target.value)}
@@ -495,8 +576,17 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
                   </select>
 
                   <button
+                    onClick={handleExportCSV}
+                    className="bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer"
+                    title="Unduh backup data warga ke format file CSV/Excel untuk arsip fisik desa"
+                  >
+                    <Download className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Ekspor CSV ({isDecrypted ? 'Plaintext' : 'Tersensor'})</span>
+                  </button>
+
+                  <button
                     onClick={() => setShowAddCitizenModal(true)}
-                    className="bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors shadow-sm"
+                    className="bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer"
                   >
                     <UserPlus className="w-3.5 h-3.5" />
                     Tambah Data Warga
@@ -504,13 +594,44 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
                 </div>
               </div>
 
-              {/* Security Advisory Banner */}
-              <div className="bg-emerald-50/70 border border-emerald-200 rounded-xl p-3 flex items-start gap-3 text-xs text-emerald-900">
-                <Lock className="w-4 h-4 text-emerald-700 shrink-0 mt-0.5" />
-                <div>
-                  <span className="font-bold block">Protokol Keamanan Data Kependudukan Desa:</span>
-                  Setiap NIK dan Nomor KK secara default disamarkan (masking) dan dienkripsi dengan standar AES-256 GCM. Akses dekripsi penuh hanya dapat dilakukan oleh Kepala Desa TAROMALIMO ZIDUHU MARUNDURI dengan verifikasi PIN resmi.
+              {/* Export Success Notification Banner */}
+              {exportNotification && (
+                <div className="bg-emerald-100 border border-emerald-300 text-emerald-950 px-4 py-2.5 rounded-xl text-xs flex items-center justify-between shadow-sm animate-in fade-in duration-200">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-emerald-700 shrink-0" />
+                    <span className="font-semibold">{exportNotification}</span>
+                  </div>
+                  <button
+                    onClick={() => setExportNotification(null)}
+                    className="text-emerald-700 hover:text-emerald-900 font-bold ml-3"
+                  >
+                    Tutup
+                  </button>
                 </div>
+              )}
+
+              {/* Security Advisory & Export Mode Banner */}
+              <div className="bg-emerald-50/70 border border-emerald-200 rounded-xl p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-emerald-900">
+                <div className="flex items-start gap-3">
+                  <Lock className="w-4 h-4 text-emerald-700 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold block">Protokol Keamanan Data Kependudukan & Ekspor Arsip Desa:</span>
+                    <span>
+                      {isDecrypted 
+                        ? 'Kunci enkripsi terbuka: Ekspor CSV akan memuat NIK & KK lengkap tanpa sensor untuk arsip buku kependudukan desa. Aksi tercatat di log audit.'
+                        : 'Enkripsi aktif: NIK & KK disensor masking (120405******0001). Buka kunci PIN bila ingin mengekspor NIK utuh untuk pencetakan dokumen fisik.'}
+                    </span>
+                  </div>
+                </div>
+
+                {!isDecrypted && (
+                  <button
+                    onClick={() => setShowPinModal(true)}
+                    className="text-emerald-800 hover:text-emerald-950 underline font-semibold shrink-0 cursor-pointer text-[11px]"
+                  >
+                    Buka PIN untuk NIK Lengkap
+                  </button>
+                )}
               </div>
 
               {/* Data Table */}
