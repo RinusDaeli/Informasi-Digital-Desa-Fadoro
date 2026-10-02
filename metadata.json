@@ -1,0 +1,6 @@
+{
+  "name": "Portal Resmi & Layanan Digital Desa Fadoro",
+  "description": "Website Resmi Pemerintah Desa Fadoro, Kec. Sirombu, Kab. Nias Barat. Transparansi APBDes, pelayanan administrasi terenkripsi, profil desa, dan notifikasi WhatsApp warga.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
